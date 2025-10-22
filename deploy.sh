@@ -1,130 +1,102 @@
 #!/bin/bash
-set -e
-trap 'echo "[ERROR] Something went wrong at line $LINENO"; exit 1' ERR
+set -euo pipefail
+IFS=$'\n\t'
 
+# ===== Logging =====
 LOG_FILE="deploy_$(date +%Y%m%d_%H%M%S).log"
-echo "[INFO] Deployment started at $(date)" | tee -a $LOG_FILE
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"; }
 
-# --- Check for cleanup flag ---
-CLEANUP=false
-if [[ "$1" == "--cleanup" ]]; then
-	    CLEANUP=true
-fi
-
-# --- User Input ---
-read -p "Git repo URL: " REPO_URL
-[[ -z "$REPO_URL" ]] && { echo "[ERROR] Repo URL cannot be empty"; exit 1; }
-
-read -s -p "GitHub Personal Access Token: " PAT
+# ===== User Input =====
+read -rp "Git repo URL: " REPO_URL
+read -rp "GitHub Personal Access Token (input hidden): " -s GITHUB_TOKEN
 echo
-[[ -z "$PAT" ]] && { echo "[ERROR] PAT cannot be empty"; exit 1; }
-
-read -p "Branch name [default: main]: " BRANCH
+read -rp "Branch name [default: main]: " BRANCH
 BRANCH=${BRANCH:-main}
+read -rp "Remote SSH username (e.g., ubuntu): " SSH_USER
+read -rp "Remote host/IP: " SSH_HOST
+read -rp "SSH private key path (full path): " SSH_KEY
+read -rp "Container internal port (app listens inside container, e.g., 80): " CONTAINER_PORT
 
-read -p "Remote SSH username (e.g., ubuntu): " SSH_USER
-[[ -z "$SSH_USER" ]] && { echo "[ERROR] SSH username cannot be empty"; exit 1; }
-
-read -p "Remote host/IP: " REMOTE_HOST
-[[ -z "$REMOTE_HOST" ]] && { echo "[ERROR] Remote host cannot be empty"; exit 1; }
-
-read -p "SSH private key path (full path): " SSH_KEY
-[[ ! -f "$SSH_KEY" ]] && { echo "[ERROR] SSH key file not found"; exit 1; }
-
-read -p "Container internal port (e.g., 80): " APP_PORT
-if ! [[ "$APP_PORT" =~ ^[0-9]+$ ]] || [ "$APP_PORT" -lt 1 ] || [ "$APP_PORT" -gt 65535 ]; then
-	    echo "[ERROR] Invalid port number"; exit 1
+# ===== Input Validation =====
+if ! [[ "$CONTAINER_PORT" =~ ^[0-9]+$ ]] || [ "$CONTAINER_PORT" -le 0 ] || [ "$CONTAINER_PORT" -gt 65535 ]; then
+	    log "[ERROR] Invalid container port."
+	        exit 1
 fi
 
-# --- Clone Repository ---
-TMP_DIR=$(mktemp -d)
-echo "[INFO] Created temporary directory: $TMP_DIR" | tee -a $LOG_FILE
-git clone -b "$BRANCH" https://$PAT@${REPO_URL#https://} "$TMP_DIR/repo" | tee -a $LOG_FILE
-
-cd "$TMP_DIR/repo"
-[[ ! -f Dockerfile && ! -f docker-compose.yml ]] && { echo "[ERROR] Dockerfile or docker-compose.yml not found"; exit 1; }
-
-# --- Build Docker Image Locally ---
-IMAGE_NAME="deploy_$(basename $REPO_URL .git | tr - _)"
-echo "[INFO] Building Docker image locally..." | tee -a $LOG_FILE
-docker build -t $IMAGE_NAME:latest . | tee -a $LOG_FILE
-
-# --- Save Docker Image ---
-IMAGE_TAR="$TMP_DIR/$IMAGE_NAME.tar"
-docker save -o "$IMAGE_TAR" $IMAGE_NAME:latest
-echo "[INFO] Docker image saved to $IMAGE_TAR" | tee -a $LOG_FILE
-
-# --- SSH and Remote Deployment ---
-echo "[INFO] Checking SSH connection..." | tee -a $LOG_FILE
-ssh -o BatchMode=yes -i "$SSH_KEY" "$SSH_USER@$REMOTE_HOST" "echo 'SSH connection successful'" | tee -a $LOG_FILE
-
-echo "[INFO] Uploading Docker image..." | tee -a $LOG_FILE
-scp -i "$SSH_KEY" "$IMAGE_TAR" "$SSH_USER@$REMOTE_HOST:/tmp/$IMAGE_NAME.tar" | tee -a $LOG_FILE
-
-# --- Remote Script ---
-REMOTE_SCRIPT=$(cat <<EOF
-set -e
-
-echo "[REMOTE] Preparing server..."
-sudo apt update -y
-sudo apt install -y docker.io docker-compose nginx
-
-# Add user to docker group
-sudo usermod -aG docker $SSH_USER || true
-
-# Cleanup option
-if $CLEANUP; then
-    echo "[REMOTE] Cleaning up all deployed resources..."
-    sudo docker ps -aq | xargs -r sudo docker stop
-    sudo docker ps -aq | xargs -r sudo docker rm
-    sudo docker images -aq | xargs -r sudo docker rmi -f
-    sudo rm -f /etc/nginx/sites-enabled/$IMAGE_NAME
-    sudo rm -f /etc/nginx/sites-available/$IMAGE_NAME
-    sudo systemctl reload nginx || true
-    exit 0
+# ===== Git Operations =====
+REPO_NAME=$(basename -s .git "$REPO_URL")
+if [ -d "$REPO_NAME" ]; then
+	    log "Repo exists, pulling latest changes..."
+	        git -C "$REPO_NAME" fetch --all
+		    git -C "$REPO_NAME" checkout "$BRANCH"
+		        git -C "$REPO_NAME" pull origin "$BRANCH"
+		else
+			    log "Cloning repo $REPO_URL..."
+			        git clone -b "$BRANCH" "$REPO_URL" "$REPO_NAME"
 fi
 
-# Stop old container if exists
-if sudo docker ps -q --filter "name=$IMAGE_NAME" | grep -q .; then
-  echo "[REMOTE] Stopping existing container..."
-  sudo docker stop $IMAGE_NAME
-  sudo docker rm $IMAGE_NAME
+# ===== Docker Build =====
+log "Building Docker image..."
+IMAGE_NAME="deploy_${REPO_NAME}"
+docker build -t "$IMAGE_NAME:latest" "$REPO_NAME"
+IMAGE_TAR="/tmp/${IMAGE_NAME}.tar"
+docker save -o "$IMAGE_TAR" "$IMAGE_NAME:latest"
+
+# ===== SSH Connectivity Check =====
+log "Testing SSH connection..."
+ssh -i "$SSH_KEY" "$SSH_USER@$SSH_HOST" "echo 'SSH connection successful'" || { log "[ERROR] SSH failed"; exit 1; }
+
+# ===== Transfer Docker image =====
+log "Transferring Docker image to remote..."
+scp -i "$SSH_KEY" "$IMAGE_TAR" "$SSH_USER@$SSH_HOST:/tmp/"
+
+# ===== Remote Deployment =====
+ssh -i "$SSH_KEY" "$SSH_USER@$SSH_HOST" bash -s <<EOF
+set -euo pipefail
+
+# ===== Install packages =====
+sudo apt-get update -y
+sudo apt-get install -y docker.io nginx
+sudo systemctl enable --now docker
+sudo systemctl enable --now nginx
+
+# ===== Load Docker Image =====
+docker load -i /tmp/$(basename "$IMAGE_TAR")
+
+# ===== Stop existing container =====
+if docker ps -q --filter "name=$IMAGE_NAME" | grep -q .; then
+    docker rm -f "$IMAGE_NAME"
 fi
 
-# Load and run new image
-sudo docker load -i /tmp/$IMAGE_NAME.tar
-if sudo docker ps -a --format '{{.Names}}' | grep -q "^$IMAGE_NAME\$"; then
-  sudo docker rm $IMAGE_NAME || true
-fi
-sudo docker run -d --name $IMAGE_NAME -p $APP_PORT:$APP_PORT $IMAGE_NAME:latest
+# ===== Run container =====
+docker run -d --name "$IMAGE_NAME" -p 80:$CONTAINER_PORT "$IMAGE_NAME:latest"
 
-# Nginx reverse proxy
+# ===== Nginx Reverse Proxy =====
 NGINX_CONF="/etc/nginx/sites-available/$IMAGE_NAME"
-sudo bash -c "cat > \$NGINX_CONF" <<EOC
+sudo tee "$NGINX_CONF" > /dev/null <<NGINX
 server {
     listen 80;
     server_name _;
     location / {
-        proxy_pass http://127.0.0.1:$APP_PORT;
+        proxy_pass http://127.0.0.1:$CONTAINER_PORT;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
-EOC
+NGINX
 
-sudo ln -sf \$NGINX_CONF /etc/nginx/sites-enabled/$IMAGE_NAME
+sudo ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
 sudo nginx -t
-sudo systemctl reload nginx
+sudo systemctl restart nginx
 
-# Deployment Validation
-echo "[REMOTE] Validating deployment..."
-sudo systemctl status nginx | head -n 10
-sudo docker ps | grep $IMAGE_NAME
+# ===== Deployment Validation =====
+docker ps | grep "$IMAGE_NAME" >/dev/null || { echo "[ERROR] Container failed to start"; exit 1; }
+systemctl is-active --quiet nginx || { echo "[ERROR] Nginx not running"; exit 1; }
+
+# ===== Cleanup =====
+rm -f /tmp/$(basename "$IMAGE_TAR")
 EOF
-)
 
-ssh -i "$SSH_KEY" "$SSH_USER@$REMOTE_HOST" "$REMOTE_SCRIPT" | tee -a $LOG_FILE
-
-echo "[INFO] Deployment completed successfully!" | tee -a $LOG_FILE
+log "Deployment completed successfully!"
 
