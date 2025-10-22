@@ -1,7 +1,7 @@
 version: '3.8'
 services:
-          web:
-                      build: . # Tells docker-compose to use the existing Dockerfile in the current directory
-                          ports:
-                                        - "80:80" # Maps server port 80 to container port 80 (matching your user input)
-                                              restart: always
+    web:
+        build: . 
+        ports:
+            - "80:80"
+        restart: always
