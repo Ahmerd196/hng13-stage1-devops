@@ -1,0 +1,61 @@
+[INFO] Starting deployment script at Wed Oct 22 03:42:42 WAT 2025
+Git repo URL: GitHub Personal Access Token (PAT): 
+Branch name [default: main]: Remote SSH username (e.g., ubuntu): Remote host/IP: SSH private key path (full path, e.g., /home/user/.ssh/id_rsa): Container internal port (app listens inside container, e.g., 80): [INFO] Created temporary directory: /tmp/tmp.kLwJBWtNz0
+[INFO] Cloning repository https://github.com/Ahmerd196/hng13-stage1-devops.git (branch: main)
+Cloning into '/tmp/tmp.kLwJBWtNz0/repo'...
+[INFO] Building Docker image locally...
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 278B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 ...
+
+#3 [auth] library/nginx:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 2.4s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 44.99kB 0.0s done
+#5 DONE 0.1s
+
+#6 [1/3] FROM docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22
+#6 resolve docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22
+#6 resolve docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22 0.1s done
+#6 DONE 0.1s
+
+#7 [2/3] WORKDIR /usr/share/nginx/html
+#7 CACHED
+
+#8 [3/3] COPY . .
+#8 DONE 0.1s
+
+#9 exporting to image
+#9 exporting layers
+#9 exporting layers 0.3s done
+#9 exporting manifest sha256:6a5708e4fa54f00179b3b282a4f1001cbfe5dc90d76bcaed8a4c8f169ba52fc5 0.1s done
+#9 exporting config sha256:bdffa96f4cc8ec28e20e2d4fe42617f0bca3aedc13e52dcc2104147b0e9b1cea 0.1s done
+#9 exporting attestation manifest sha256:a127034116e3eaf5232b16e6b62f96ce18443058af465c3bc7a0a8567aa46e91 0.1s done
+#9 exporting manifest list sha256:4a0bc0036876b61552d6c51d116b01c66a23913f1dce813198c5a1f53a6b8117
+#9 exporting manifest list sha256:4a0bc0036876b61552d6c51d116b01c66a23913f1dce813198c5a1f53a6b8117 0.0s done
+#9 naming to docker.io/library/deploy_hng13-stage1-devops:latest done
+#9 unpacking to docker.io/library/deploy_hng13-stage1-devops:latest 0.1s done
+#9 DONE 0.9s
+[INFO] Saving Docker image to /tmp/tmp.kLwJBWtNz0/deploy_hng13-stage1-devops.tar
+[INFO] Uploading Docker image to remote...
+[INFO] Executing deployment on remote server...
+The image deploy_hng13-stage1-devops:latest already exists, renaming the old one with ID sha256:45efe792c7a2011af6e70026bbf589d147bcba90765fc0f69f8ccd9c2e95a6a8 to empty string
+Loaded image: deploy_hng13-stage1-devops:latest
+[INFO] Stopping existing container deploy_hng13-stage1-devops
+deploy_hng13-stage1-devops
+deploy_hng13-stage1-devops
+9edfffc43d07cf926351b0e54bc05e87e9bc1ea929aeda758c5751e4a9dd5e22
+bash: line 17: host: unbound variable

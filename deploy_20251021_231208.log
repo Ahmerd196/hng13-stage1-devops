@@ -1,0 +1,4 @@
+2025-10-21 23:12:08 Starting deploy script.
+2025-10-21 23:14:28 Inputs received: repo=https://github.com/Ahmerd196/hng13-stage1-devops/ branch=main host= user=ubuntu repo_name=hng13-stage1-devops container=deploy_hng13-stage1-devops app_port=80
+2025-10-21 23:14:28 Created tmp dir /tmp/deploy_hng13-stage1-devops_1SFE
+2025-10-21 23:14:28 Cloning repository (branch: main) into /tmp/deploy_hng13-stage1-devops_1SFE

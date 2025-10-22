@@ -1,0 +1,63 @@
+[INFO] Starting deployment script at Wed Oct 22 03:35:24 WAT 2025
+Git repo URL: GitHub Personal Access Token (PAT): 
+Branch name [default: main]: Remote SSH username (e.g., ubuntu): Remote host/IP: SSH private key path (full path, e.g., /home/user/.ssh/id_rsa): Container internal port (app listens inside container, e.g., 80): [INFO] Created temporary directory: /tmp/tmp.74Mu8A4UjA
+[INFO] Cloning repository https://github.com/Ahmerd196/hng13-stage1-devops.git (branch: main)
+Cloning into '/tmp/tmp.74Mu8A4UjA/repo'...
+[INFO] Building Docker image locally...
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 278B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 ...
+
+#3 [auth] library/nginx:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 2.4s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 44.99kB 0.0s done
+#5 DONE 0.1s
+
+#6 [1/3] FROM docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22
+#6 resolve docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22
+#6 resolve docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22 0.1s done
+#6 DONE 0.1s
+
+#7 [2/3] WORKDIR /usr/share/nginx/html
+#7 CACHED
+
+#8 [3/3] COPY . .
+#8 DONE 0.1s
+
+#9 exporting to image
+#9 exporting layers
+#9 exporting layers 0.3s done
+#9 exporting manifest sha256:9e89a0cee48d90628d2aa2a1edb9b9843c2ee2fa41e7fde0a1eacf303677cfa2 0.1s done
+#9 exporting config sha256:45efe792c7a2011af6e70026bbf589d147bcba90765fc0f69f8ccd9c2e95a6a8 0.1s done
+#9 exporting attestation manifest sha256:58dbecff102960a1f410044c86db5224f7f1c89635f60a64c42214c0d9adcbae 0.1s done
+#9 exporting manifest list sha256:f8e64c7410b9654b13066b57e9bb3ca87e5606d82827f55c0ac2d0c8c55181c5
+#9 exporting manifest list sha256:f8e64c7410b9654b13066b57e9bb3ca87e5606d82827f55c0ac2d0c8c55181c5 0.0s done
+#9 naming to docker.io/library/deploy_hng13-stage1-devops:latest 0.0s done
+#9 unpacking to docker.io/library/deploy_hng13-stage1-devops:latest 0.1s done
+#9 DONE 0.9s
+[INFO] Saving Docker image to /tmp/tmp.74Mu8A4UjA/deploy_hng13-stage1-devops.tar
+[INFO] Uploading Docker image to remote...
+[INFO] Executing deployment on remote server...
+The image deploy_hng13-stage1-devops:latest already exists, renaming the old one with ID sha256:259abb33a950251b3f14fd2ece9655801ead6ed61555d5fcaa0a4ff262fc0512 to empty string
+Loaded image: deploy_hng13-stage1-devops:latest
+[INFO] Stopping existing container deploy_hng13-stage1-devops
+deploy_hng13-stage1-devops
+deploy_hng13-stage1-devops
+dae6adbef8bbf6eb81f16ae85a4b58f4ba13fd2e3146a737b4e569122a39520f
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint deploy_hng13-stage1-devops (60a12bcf9d0b71a8322a0be066c2c5718876e4a2465b3136442f0d3082aaaaa2): Bind for 0.0.0.0:80 failed: port is already allocated
+
+Run 'docker run --help' for more information

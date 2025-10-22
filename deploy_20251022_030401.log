@@ -1,0 +1,112 @@
+Wed Oct 22 03:04:02 WAT 2025 - Created temporary directory: /tmp/tmp.sdegSKHuPI
+Wed Oct 22 03:04:02 WAT 2025 - Cloning repository https://github.com/Ahmerd196/hng13-stage1-devops.git (branch: main)
+Cloning into '/tmp/tmp.sdegSKHuPI/repo'...
+warning: redirecting to https://github.com/Ahmerd196/hng13-stage1-devops.git/
+Wed Oct 22 03:04:03 WAT 2025 - Building Docker image locally...
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 278B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 ...
+
+#3 [auth] library/nginx:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/nginx:alpine
+#2 DONE 2.3s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 44.83kB 0.0s done
+#5 DONE 0.1s
+
+#6 [1/3] FROM docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22
+#6 resolve docker.io/library/nginx:alpine@sha256:61e01287e546aac28a3f56839c136b31f590273f3b41187a36f46f6a03bbfe22 0.1s done
+#6 DONE 0.1s
+
+#7 [2/3] WORKDIR /usr/share/nginx/html
+#7 CACHED
+
+#8 [3/3] COPY . .
+#8 DONE 0.1s
+
+#9 exporting to image
+#9 exporting layers
+#9 exporting layers 0.3s done
+#9 exporting manifest sha256:f9767f2044e957bc741f4cc9554f837662e1b8c418db568552a374ebe704e349 0.1s done
+#9 exporting config sha256:259abb33a950251b3f14fd2ece9655801ead6ed61555d5fcaa0a4ff262fc0512 0.0s done
+#9 exporting attestation manifest sha256:7c7afd8ea3bd38358ba26ccb327e8c5abdbf7eac660302e14f1c1dc453275df7 0.1s done
+#9 exporting manifest list sha256:3c622e5c567e0b5e6172875dd9b64cf2ed09c69e334ddc29415254ce84f94461
+#9 exporting manifest list sha256:3c622e5c567e0b5e6172875dd9b64cf2ed09c69e334ddc29415254ce84f94461 0.1s done
+#9 naming to docker.io/library/deploy_hng13-stage1-devops:latest done
+#9 unpacking to docker.io/library/deploy_hng13-stage1-devops:latest 0.1s done
+#9 DONE 0.9s
+Wed Oct 22 03:04:07 WAT 2025 - Saving Docker image to /tmp/tmp.sdegSKHuPI/deploy_hng13-stage1-devops.tar
+Wed Oct 22 03:04:09 WAT 2025 - Uploading Docker image and deploying remotely...
+Hit:1 http://eu-north-1.ec2.archive.ubuntu.com/ubuntu noble InRelease
+Hit:2 http://eu-north-1.ec2.archive.ubuntu.com/ubuntu noble-updates InRelease
+Hit:3 http://eu-north-1.ec2.archive.ubuntu.com/ubuntu noble-backports InRelease
+Hit:4 https://download.docker.com/linux/ubuntu noble InRelease
+Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following upgrades have been deferred due to phasing:
+  sosreport
+The following packages have been kept back:
+  linux-aws linux-headers-aws linux-image-aws
+The following packages will be upgraded:
+  distro-info-data linux-tools-common
+2 upgraded, 0 newly installed, 0 to remove and 4 not upgraded.
+Need to get 779 kB of archives.
+After this operation, 11.3 kB of additional disk space will be used.
+Get:1 http://eu-north-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 distro-info-data all 0.60ubuntu0.5 [6934 B]
+Get:2 http://eu-north-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 linux-tools-common all 6.8.0-86.87 [772 kB]
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+dpkg-preconfigure: unable to re-open stdin: 
+Fetched 779 kB in 0s (25.9 MB/s)
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 103674 files and directories currently installed.)
+Preparing to unpack .../distro-info-data_0.60ubuntu0.5_all.deb ...
+Unpacking distro-info-data (0.60ubuntu0.5) over (0.60ubuntu0.3) ...
+Preparing to unpack .../linux-tools-common_6.8.0-86.87_all.deb ...
+Unpacking linux-tools-common (6.8.0-86.87) over (6.8.0-85.85) ...
+Setting up distro-info-data (0.60ubuntu0.5) ...
+Setting up linux-tools-common (6.8.0-86.87) ...
+Processing triggers for man-db (2.12.0-4build2) ...
+debconf: unable to initialize frontend: Dialog
+debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Teletype
+
+Running kernel seems to be up-to-date.
+
+No services need to be restarted.
+
+No containers need to be restarted.
+
+No user sessions are running outdated binaries.
+
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+The image deploy_hng13-stage1-devops:latest already exists, renaming the old one with ID sha256:da1227dbde9ff7ee1cbd1dd70ff92bd90020b62360038f1a659e7d0c7a8e93a2 to empty string
+Loaded image: deploy_hng13-stage1-devops:latest
+deploy_hng13-stage1-devops
+deploy_hng13-stage1-devops
+bec7ff528a9c9fd5ed2391b0fcb347854ae96af3699010a3d5270b5532591fbf
+docker: Error response from daemon: failed to set up container networking: driver failed programming external connectivity on endpoint deploy_hng13-stage1-devops (c1b775681db88f4c242d21ea40d0b77daef67f01d5d7b44968929822577d5001): failed to bind host port for 127.0.0.1:80:172.17.0.2:80/tcp: address already in use
+
+Run 'docker run --help' for more information

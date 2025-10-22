@@ -1,0 +1,6 @@
+20251022_031503 - Starting deployment...
+2025-10-22_03:16:34 - Created temporary directory: /tmp/tmp.Cixw6WxTFM
+2025-10-22_03:16:34 - Cloning repository https://github.com/Ahmerd196/hng13-stage1-devops.git (branch: main)
+2025-10-22_03:16:35 - Building Docker image locally...
+2025-10-22_03:16:45 - Using remote host port 8000 for container
+2025-10-22_03:17:02 - Uploaded Docker image to remote
