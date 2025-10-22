@@ -1,95 +1,131 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# deploy.sh - HNG DevOps Stage 1 Task
 set -euo pipefail
+trap 'echo "[ERROR] Something went wrong at line $LINENO"; exit 1' ERR
 
-# ====== Logging ======
-LOG_FILE="deploy_$(date +%Y%m%d_%H%M%S).log"
-exec > >(tee -a "$LOG_FILE") 2>&1
+# --- Logging ---
+log() {
+	  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+  }
 
-echo "[INFO] Starting deployment script at $(date)"
+# --- Cleanup flag ---
+CLEANUP=false
+for arg in "$@"; do
+	  [[ "$arg" == "--cleanup" ]] && CLEANUP=true
+  done
 
-# ====== Collect user input ======
-read -rp "Git repo URL: " REPO_URL
-read -rsp "GitHub Personal Access Token (PAT): " GITHUB_TOKEN
-echo
-read -rp "Branch name [default: main]: " BRANCH
-BRANCH=${BRANCH:-main}
-read -rp "Remote SSH username (e.g., ubuntu): " SSH_USER
-read -rp "Remote host/IP: " SSH_HOST
-read -rp "SSH private key path (full path, e.g., /home/user/.ssh/id_rsa): " SSH_KEY
-read -rp "Container internal port (app listens inside container, e.g., 80): " APP_PORT
+  # --- User Input ---
+  read -p "Git repo URL: " repo
+  if [[ ! "$repo" =~ ^https?:// ]]; then
+	    echo "[ERROR] Invalid Git URL"; exit 1
+  fi
 
-IMAGE_NAME="deploy_$(basename "$REPO_URL" .git | tr '/' '_')"
-CONTAINER_NAME="$IMAGE_NAME"
+  read -s -p "GitHub Personal Access Token: " token; echo
+  read -p "Branch name [default: main]: " branch
+  branch=${branch:-main}
 
-TMP_DIR=$(mktemp -d)
-echo "[INFO] Created temporary directory: $TMP_DIR"
+  read -p "Remote SSH username (e.g., ubuntu): " ssh_user
+  read -p "Remote host/IP: " host
+  read -p "SSH private key path (full path, e.g., /home/user/.ssh/id_rsa): " ssh_key
+  if [[ ! -f "$ssh_key" ]]; then
+	    echo "[ERROR] SSH key not found"; exit 1
+  fi
 
-# ====== Clone repo ======
-echo "[INFO] Cloning repository $REPO_URL (branch: $BRANCH)"
-git clone -b "$BRANCH" "https://$GITHUB_TOKEN@${REPO_URL#https://}" "$TMP_DIR/repo"
+  read -p "Container internal port (e.g., 80): " app_port
+  if ! [[ "$app_port" =~ ^[0-9]+$ ]]; then
+	    echo "[ERROR] Port must be numeric"; exit 1
+  fi
 
-cd "$TMP_DIR/repo"
+  container_name=$(basename "$repo" .git)
+  tmp_dir=$(mktemp -d)
+  log "Created temporary directory: $tmp_dir"
 
-if [[ ! -f Dockerfile && ! -f docker-compose.yml ]]; then
-	    echo "[ERROR] No Dockerfile or docker-compose.yml found!"
-	        exit 1
+  # --- Git Operations ---
+  cd "$tmp_dir"
+  if [ -d "$container_name" ]; then
+	    cd "$container_name"
+	      git fetch
+	        git checkout "$branch"
+		  git pull origin "$branch"
+	  else
+		    git clone -b "$branch" "https://$token@${repo#https://}" "$container_name"
+  fi
+  cd "$container_name"
+
+  # --- Docker Build ---
+  if [ ! -f Dockerfile ]; then
+	    log "No Dockerfile found, exiting"; exit 1
+  fi
+  log "Building Docker image locally..."
+docker build -t "$container_name:latest" .
+
+# --- SSH Connectivity Check ---
+if ! ssh -i "$ssh_key" "$ssh_user@$host" "echo 1" &>/dev/null; then
+	  echo "[ERROR] SSH connection failed"; exit 1
+fi
+log "SSH connection successful"
+
+# --- Optional Cleanup ---
+if [ "$CLEANUP" = true ]; then
+	  log "Running cleanup on remote..."
+	    ssh -i "$ssh_key" "$ssh_user@$host" "
+	        docker stop $container_name || true
+		    docker rm $container_name || true
+		        docker rmi $container_name:latest || true
+			    sudo rm -f /etc/nginx/sites-enabled/$container_name
+			        sudo rm -f /etc/nginx/sites-available/$container_name
+				  "
+				    log "Cleanup complete"
+				      exit 0
 fi
 
-# ====== Build Docker image locally ======
-echo "[INFO] Building Docker image locally..."
-docker build -t "$IMAGE_NAME:latest" .
+# --- Transfer Docker image ---
+docker save "$container_name:latest" | bzip2 | ssh -i "$ssh_key" "$ssh_user@$host" "bunzip2 | docker load"
 
-# ====== Save Docker image ======
-IMAGE_TAR="$TMP_DIR/$IMAGE_NAME.tar"
-echo "[INFO] Saving Docker image to $IMAGE_TAR"
-docker save -o "$IMAGE_TAR" "$IMAGE_NAME:latest"
-
-# ====== Upload image to remote ======
-echo "[INFO] Uploading Docker image to remote..."
-scp -i "$SSH_KEY" "$IMAGE_TAR" "$SSH_USER@$SSH_HOST:/tmp/"
-
-# ====== Deploy on remote ======
-echo "[INFO] Executing deployment on remote server..."
-ssh -i "$SSH_KEY" "$SSH_USER@$SSH_HOST" bash -s <<EOF
+# --- Remote Deployment ---
+ssh -i "$ssh_key" "$ssh_user@$host" bash <<EOF
 set -euo pipefail
-
-# Load Docker image
-docker load -i /tmp/$IMAGE_NAME.tar
-
-# Stop & remove existing container if running
-if docker ps -a --format '{{.Names}}' | grep -Eq "^$CONTAINER_NAME\$"; then
-    echo "[INFO] Stopping existing container $CONTAINER_NAME"
-    docker stop $CONTAINER_NAME || true
-    docker rm $CONTAINER_NAME || true
-fi
+# Stop & remove old container
+docker stop $container_name || true
+docker rm $container_name || true
 
 # Run container
-docker run -d --name $CONTAINER_NAME -p 80:$APP_PORT "$IMAGE_NAME:latest"
+docker run -d --name $container_name -p $app_port:$app_port $container_name:latest
 
-# Setup Nginx reverse proxy
-sudo tee /etc/nginx/sites-available/$IMAGE_NAME > /dev/null <<NGINX_CONF
+# Install Docker & Nginx if missing
+if ! command -v docker >/dev/null; then
+  sudo apt update
+  sudo apt install -y docker.io
+fi
+if ! command -v nginx >/dev/null; then
+  sudo apt install -y nginx
+fi
+sudo systemctl enable docker nginx
+sudo systemctl start docker nginx
+
+# Configure Nginx reverse proxy
+cat <<NGINX > /tmp/$container_name.nginx
 server {
     listen 80;
     server_name _;
-
     location / {
-        proxy_pass http://127.0.0.1:$APP_PORT;
+        proxy_pass http://127.0.0.1:$app_port;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     }
 }
-NGINX_CONF
+NGINX
 
-sudo ln -sf /etc/nginx/sites-available/$IMAGE_NAME /etc/nginx/sites-enabled/$IMAGE_NAME
-
-# Test & reload Nginx
+sudo mv /tmp/$container_name.nginx /etc/nginx/sites-available/$container_name
+sudo ln -sf /etc/nginx/sites-available/$container_name /etc/nginx/sites-enabled/
 sudo nginx -t
-sudo systemctl restart nginx
+sudo systemctl reload nginx
 
-echo "[INFO] Deployment complete on remote server."
+# Validate deployment
+docker ps | grep $container_name
+curl -s http://127.0.0.1 | head -n 5
 EOF
 
-echo "[INFO] Deployment finished successfully."
-echo "[INFO] Check the logs above or in $LOG_FILE for details."
+log "Deployment complete!"
 
