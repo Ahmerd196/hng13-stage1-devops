@@ -1,160 +1,133 @@
 #!/bin/bash
+# ==========================================================
+# HNG Stage 1 DevOps Task - Automated Deployment Script
+# Author: Ahmad Abdurrahman Muhammad
+# ==========================================================
 set -euo pipefail
-IFS=$'\n\t'
+trap 'echo "[ERROR] Unexpected error on line $LINENO."; exit 1' ERR
 
-# ----------------------------------------
-# Simple logging function
-# ----------------------------------------
-log() {
-	    echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $*"
-    }
+LOG_FILE="deploy_$(date +%Y%m%d_%H%M%S).log"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-# ----------------------------------------
-# Error handler
-# ----------------------------------------
-error_exit() {
-	    echo "[ERROR] $(date '+%Y-%m-%d %H:%M:%S') - $*" >&2
-	        exit 1
-	}
-trap 'error_exit "An unexpected error occurred."' ERR
+echo "[INFO] Starting deployment..."
 
-# ----------------------------------------
-# User input collection with validation
-# ----------------------------------------
-read -rp "Git repo URL: " GIT_REPO
-[[ -z "$GIT_REPO" ]] && error_exit "Git repo URL cannot be empty"
+# === 1. Collect Parameters ===
+read -p "Enter Git Repository URL: " GIT_URL
+read -p "Enter Personal Access Token (PAT): " PAT
+read -p "Enter Branch name [default: main]: " BRANCH
+BRANCH=${BRANCH:-main}
+read -p "Enter Remote Server Username: " SSH_USER
+read -p "Enter Remote Server IP: " SSH_IP
+read -p "Enter SSH Key Path (e.g., ~/.ssh/id_rsa): " SSH_KEY
+read -p "Enter Application Port (unused port, e.g., 8080): " APP_PORT
+APP_PORT=${APP_PORT:-8080}
 
-read -rsp "GitHub Personal Access Token: " GIT_TOKEN
-echo
-[[ -z "$GIT_TOKEN" ]] && error_exit "Personal Access Token cannot be empty"
+# === 2. Clone Repository ===
+REPO_DIR=$(basename "$GIT_URL" .git)
+if [ -d "$REPO_DIR" ]; then
+	  echo "[INFO] Repo exists, pulling latest changes..."
+	    cd "$REPO_DIR"
+	      git pull origin "$BRANCH"
+      else
+	        echo "[INFO] Cloning repository..."
+		  git clone -b "$BRANCH" "https://${PAT}@${GIT_URL#https://}" "$REPO_DIR"
+		    cd "$REPO_DIR"
+fi
 
-read -rp "Branch name [default: main]: " GIT_BRANCH
-GIT_BRANCH=${GIT_BRANCH:-main}
+# === 3. Verify Project Structure ===
+if [ -f "Dockerfile" ] || [ -f "docker-compose.yml" ]; then
+	  echo "[SUCCESS] Docker configuration found."
+  else
+	    echo "[ERROR] No Dockerfile or docker-compose.yml found."
+	      exit 1
+fi
 
-read -rp "Remote SSH username: " SSH_USER
-[[ -z "$SSH_USER" ]] && error_exit "SSH username cannot be empty"
+# === 4. Remote Server Connectivity Check ===
+echo "[INFO] Checking SSH connectivity..."
+ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${SSH_IP}" "echo Connected OK" || {
+	  echo "[ERROR] SSH connection failed."
+  exit 1
+}
 
-read -rp "Remote host/IP: " SSH_HOST
-[[ -z "$SSH_HOST" ]] && error_exit "Remote host/IP cannot be empty"
-
-read -rp "SSH private key path: " SSH_KEY
-[[ ! -f "$SSH_KEY" ]] && error_exit "SSH private key not found at $SSH_KEY"
-
-read -rp "Container internal port (inside container): " APP_PORT
-[[ -z "$APP_PORT" ]] && error_exit "App port cannot be empty"
-
-# Temporary directory for build
-TMP_DIR=$(mktemp -d)
-log "Created temporary directory: $TMP_DIR"
-
-# Clone the repo
-log "Cloning repository $GIT_REPO (branch: $GIT_BRANCH)"
-git clone --branch "$GIT_BRANCH" "$GIT_REPO" "$TMP_DIR/repo"
-
-# Build Docker image locally
-IMAGE_NAME="deploy_hng13_stage1_devops"
-log "Building Docker image locally..."
-docker build -t "$IMAGE_NAME:latest" "$TMP_DIR/repo"
-
-# Save Docker image to tar
-IMAGE_TAR="$TMP_DIR/${IMAGE_NAME}.tar"
-log "Saving Docker image to $IMAGE_TAR"
-docker save -o "$IMAGE_TAR" "$IMAGE_NAME:latest"
-
-# SSH command prefix
-SSH_CMD="ssh -i $SSH_KEY -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST"
-
-# ----------------------------------------
-# Remote setup
-# ----------------------------------------
-log "Preparing remote server..."
-
-$SSH_CMD bash -c "'
+# === 5. Prepare Remote Environment ===
+echo "[INFO] Preparing remote environment..."
+ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_IP}" bash <<EOF
 set -e
-# Update packages
-sudo apt-get update
-
-# Remove conflicting containerd packages
-sudo apt-get remove -y containerd containerd.io || true
-
-# Install required packages and Docker
-sudo apt-get install -y ca-certificates curl gnupg lsb-release nginx
-
-# Add Docker GPG key
+sudo apt-get update -y
+sudo apt-get install -y ca-certificates curl gnupg nginx
 sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+if ! command -v docker &>/dev/null; then
+  echo "[INFO] Installing Docker..."
+  sudo apt-get remove -y containerd.io || true
+  curl -fsSL https://get.docker.com | sh
+fi
+if ! command -v docker-compose &>/dev/null; then
+  echo "[INFO] Installing Docker Compose..."
+  sudo apt-get install -y docker-compose
+fi
+sudo systemctl enable docker
+sudo systemctl start docker
+sudo usermod -aG docker \$USER
+EOF
 
-# Setup Docker repo
-echo \
-	  \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-	    https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable\" | \
-	      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+# === 6. Deploy Dockerized App ===
+echo "[INFO] Deploying application..."
+rsync -avz -e "ssh -i $SSH_KEY" ./ "${SSH_USER}@${SSH_IP}:/home/${SSH_USER}/${REPO_DIR}"
 
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Ensure docker group
-sudo usermod -aG docker $SSH_USER || true
-
-# Start Nginx
-sudo systemctl enable nginx
-sudo systemctl start nginx
-'"
-
-# ----------------------------------------
-# Transfer Docker image
-# ----------------------------------------
-log "Transferring Docker image to remote..."
-scp -i "$SSH_KEY" "$IMAGE_TAR" "$SSH_USER@$SSH_HOST:/tmp/"
-
-# ----------------------------------------
-# Remote Docker load and run
-# ----------------------------------------
-log "Deploying container on remote..."
-$SSH_CMD bash -c "'
+ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_IP}" bash <<EOF
 set -e
+cd /home/${SSH_USER}/${REPO_DIR}
 
-IMAGE_NAME=\"$IMAGE_NAME:latest\"
+# Stop any previous container
+docker ps -q --filter "name=hng13-stage1-devops-web" | grep -q . && \
+  docker stop hng13-stage1-devops-web && docker rm hng13-stage1-devops-web || true
 
-# Load image
-sudo docker load -i /tmp/${IMAGE_NAME}.tar
+# Free the port
+sudo fuser -k ${APP_PORT}/tcp || true
 
-# Stop and remove old container if exists
-if sudo docker ps -aq --filter name=$IMAGE_NAME | grep -q .; then
-	    sudo docker stop $IMAGE_NAME || true
-	        sudo docker rm $IMAGE_NAME || true
-		fi
+# Build and Run container
+docker build -t hng13-stage1-devops-web .
+docker run -d -p ${APP_PORT}:80 --name hng13-stage1-devops-web hng13-stage1-devops-web
 
-		# Run container
-		sudo docker run -d --name $IMAGE_NAME -p 80:$APP_PORT $IMAGE_NAME:latest
-		'"
+# Validate container
+sleep 5
+docker ps | grep hng13-stage1-devops-web && echo "[SUCCESS] Container is running on port ${APP_PORT}"
+EOF
 
-		# ----------------------------------------
-		# Configure Nginx as reverse proxy
-		# ----------------------------------------
-		log "Configuring Nginx reverse proxy..."
-		NGINX_CONF="server {
-		    listen 80;
-		        server_name _;
-			    location / {
-			            proxy_pass http://127.0.0.1:$APP_PORT;
-				            proxy_set_header Host \$host;
-					            proxy_set_header X-Real-IP \$remote_addr;
-						            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-							        }
-						}"
+# === 7. Configure Nginx Reverse Proxy (Fixed Escape Issue) ===
+echo "[INFO] Configuring Nginx reverse proxy..."
+ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_IP}" bash <<EOF
+set -e
+sudo tee /etc/nginx/sites-available/hng13-stage1-devops.conf > /dev/null <<'NGINX_CONF'
+server {
+    listen 80;
+    server_name _;
 
-					echo "$NGINX_CONF" > "$TMP_DIR/nginx.conf"
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+NGINX_CONF
+sudo ln -sf /etc/nginx/sites-available/hng13-stage1-devops.conf /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+EOF
 
-					scp -i "$SSH_KEY" "$TMP_DIR/nginx.conf" "$SSH_USER@$SSH_HOST:/tmp/deploy_nginx.conf"
+# === 8. Validate Deployment ===
+echo "[INFO] Validating deployment..."
+ssh -i "$SSH_KEY" "${SSH_USER}@${SSH_IP}" bash <<EOF
+set -e
+docker ps | grep hng13-stage1-devops-web || { echo "[ERROR] Docker container not running"; exit 1; }
+sudo systemctl is-active --quiet nginx && echo "[SUCCESS] Nginx is active."
+curl -I http://127.0.0.1 | head -n 1
+EOF
 
-					$SSH_CMD bash -c "'
-					set -e
-					sudo mv /tmp/deploy_nginx.conf /etc/nginx/sites-available/deploy_hng13_stage1
-					sudo ln -sf /etc/nginx/sites-available/deploy_hng13_stage1 /etc/nginx/sites-enabled/deploy_hng13_stage1
-					sudo nginx -t
-					sudo systemctl reload nginx
-					'"
-
-					log "Deployment completed successfully!"
+echo "[SUCCESS] Deployment complete!"
+echo "Access your app at: http://${SSH_IP}"
+echo "Container Port: ${APP_PORT}"
+echo "Log file: ${LOG_FILE}"
 
